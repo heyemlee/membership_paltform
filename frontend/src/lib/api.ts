@@ -18,10 +18,9 @@ async function fetchApi<T>(
 
     // Add auth token if available
     if (typeof window !== 'undefined') {
-        const user = localStorage.getItem('user');
-        if (user) {
-            // In production, this would be a real JWT token
-            headers['Authorization'] = `Bearer mock-token`;
+        const token = localStorage.getItem('accessToken');
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
         }
     }
 
@@ -58,15 +57,21 @@ export const endpoints = {
         create: '/customers',
         update: (id: string) => `/customers/${id}`,
         delete: (id: string) => `/customers/${id}`,
+        promoCodes: (id: string) => `/customers/${id}/promo-codes`,
+        addPromoCode: (id: string) => `/customers/${id}/promo-codes`,
+        removePromoCode: (id: string, codeId: string) => `/customers/${id}/promo-codes/${codeId}`,
     },
     orders: {
         list: '/orders',
         detail: (id: string) => `/orders/${id}`,
+        create: '/orders',
         sync: '/orders/sync',
     },
     benefits: {
         discountRules: '/benefits/discount-rules',
         pointsRules: '/benefits/points-rules',
+        discountCodes: '/benefits/discount-codes',
+        discountCodeDetail: (id: string) => `/benefits/discount-codes/${id}`,
     },
     sms: {
         campaigns: '/sms/campaigns',
@@ -80,5 +85,17 @@ export const endpoints = {
         all: '/settings',
         discountRates: '/settings/discount-rates',
         pointsConfig: '/settings/points-config',
+        wholesaleConfig: '/settings/wholesale-config',
+    },
+    quickbooks: {
+        status: '/quickbooks/status',
+        authUrl: '/quickbooks/auth-url',
+        disconnect: '/quickbooks/disconnect',
+        syncCustomers: '/quickbooks/sync/customers',
+        syncOrders: '/quickbooks/sync/orders',
+        discountHelper: '/quickbooks/discount-helper/lookup',
+        calculateDiscount: '/quickbooks/discount-helper/calculate',
+        syncStats: '/quickbooks/sync-stats',
+        syncLogs: '/quickbooks/sync-logs',
     },
 };

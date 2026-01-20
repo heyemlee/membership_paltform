@@ -24,13 +24,19 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
-import { mockCustomers } from '@/lib/mock-data';
+import { api, endpoints } from '@/lib/api';
 import { Customer, OrderItemBasic } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { ArrowLeft, Plus, Search, Trash2, ShoppingCart } from 'lucide-react';
 
+interface CustomersResponse {
+    data: Customer[];
+    meta: { total: number; page: number; limit: number; totalPages: number };
+}
+
 export default function CreateOrderPage() {
     const router = useRouter();
+    const [customers, setCustomers] = useState<Customer[]>([]);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
     const [items, setItems] = useState<OrderItemBasic[]>([]);
 
@@ -43,7 +49,19 @@ export default function CreateOrderPage() {
     const [usePoints, setUsePoints] = useState(false);
     const [pointsToRedeem, setPointsToRedeem] = useState('');
 
-    const customer = mockCustomers.find(c => c.id === selectedCustomerId);
+    useEffect(() => {
+        const fetchCustomers = async () => {
+            try {
+                const response = await api.get<CustomersResponse>(`${endpoints.customers.list}?limit=100`);
+                setCustomers(response.data);
+            } catch (err) {
+                console.error('Failed to load customers:', err);
+            }
+        };
+        fetchCustomers();
+    }, []);
+
+    const customer = customers.find(c => c.id === selectedCustomerId);
 
     const handleAddItem = () => {
         if (!newItemName || !newItemPrice) return;
@@ -83,11 +101,24 @@ export default function CreateOrderPage() {
     const handleSubmit = async () => {
         if (!customer || items.length === 0) return;
 
-        // In real app: POST to API
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+            await api.post(endpoints.orders.create, {
+                customerId: customer.id,
+                customerName: customer.name,
+                items: items.map(item => ({
+                    name: item.name,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                })),
+                pointsToRedeem: usePoints ? parseInt(pointsToRedeem || '0') : 0,
+            });
 
-        alert('Order created successfully!');
-        router.push('/orders');
+            alert('Order created successfully!');
+            router.push('/orders');
+        } catch (error) {
+            console.error('Failed to create order:', error);
+            alert('Failed to create order. Please try again.');
+        }
     };
 
     return (
@@ -118,7 +149,7 @@ export default function CreateOrderPage() {
                                             <SelectValue placeholder="Search or select customer..." />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {mockCustomers.map(c => (
+                                            {customers.map(c => (
                                                 <SelectItem key={c.id} value={c.id}>
                                                     {c.name} ({c.type}) - {c.phone}
                                                 </SelectItem>

@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, UserPlus, Save } from 'lucide-react';
+import { api, endpoints } from '@/lib/api';
 
 export default function NewCustomerPage() {
     const router = useRouter();
@@ -33,15 +34,29 @@ export default function NewCustomerPage() {
         e.preventDefault();
         setLoading(true);
 
-        // Simulate API call
-        setTimeout(() => {
-            setLoading(false);
+        try {
+            await api.post(endpoints.customers.create, {
+                name: formData.name || formData.phone, // Use phone as name if not provided
+                email: formData.email || null,
+                phone: formData.phone,
+                type: formData.type,
+            });
+
             toast({
                 title: 'Customer created',
-                description: `${formData.name} has been added successfully.`,
+                description: `${formData.name || formData.phone} has been added successfully.`,
             });
             router.push('/customers');
-        }, 1000);
+        } catch (error) {
+            console.error('Failed to create customer:', error);
+            toast({
+                title: 'Error',
+                description: 'Failed to create customer. Please try again.',
+                variant: 'destructive',
+            });
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (

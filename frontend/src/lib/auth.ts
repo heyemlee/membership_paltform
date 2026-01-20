@@ -1,51 +1,84 @@
-// Auth utilities - Mock implementation
+// Auth utilities - Real API implementation
 import { User, UserRole } from '@/types';
 
-// Mock users for demo
-const MOCK_USERS: Record<string, { password: string; user: User }> = {
-    'admin@example.com': {
-        password: 'admin',
-        user: {
-            id: 'user-001',
-            email: 'admin@example.com',
-            name: 'Admin User',
-            role: 'ADMIN',
-            status: 'ACTIVE',
-            createdAt: new Date().toISOString(),
-        },
-    },
-    'staff@example.com': {
-        password: 'staff',
-        user: {
-            id: 'user-002',
-            email: 'staff@example.com',
-            name: 'Staff Member',
-            role: 'STAFF',
-            status: 'ACTIVE',
-            createdAt: new Date().toISOString(),
-        },
-    },
-};
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 // Auth state (client-side only)
 let currentUser: User | null = null;
 
-export function login(email: string, password: string): User | null {
-    const entry = MOCK_USERS[email];
-    if (entry && entry.password === password) {
-        currentUser = entry.user;
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('user', JSON.stringify(entry.user));
+interface LoginResponse {
+    user: User;
+    accessToken: string;
+}
+
+interface RegisterData {
+    email: string;
+    password: string;
+    name: string;
+    role?: UserRole;
+}
+
+export async function login(email: string, password: string): Promise<User | null> {
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+        });
+
+        if (!response.ok) {
+            console.error('Login failed:', response.statusText);
+            return null;
         }
-        return entry.user;
+
+        const data: LoginResponse = await response.json();
+        currentUser = data.user;
+
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('user', JSON.stringify(data.user));
+            localStorage.setItem('accessToken', data.accessToken);
+        }
+
+        return data.user;
+    } catch (error) {
+        console.error('Login error:', error);
+        return null;
     }
-    return null;
+}
+
+export async function register(data: RegisterData): Promise<User | null> {
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+
+        if (!response.ok) {
+            console.error('Registration failed:', response.statusText);
+            return null;
+        }
+
+        const result: LoginResponse = await response.json();
+        currentUser = result.user;
+
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('user', JSON.stringify(result.user));
+            localStorage.setItem('accessToken', result.accessToken);
+        }
+
+        return result.user;
+    } catch (error) {
+        console.error('Registration error:', error);
+        return null;
+    }
 }
 
 export function logout(): void {
     currentUser = null;
     if (typeof window !== 'undefined') {
         localStorage.removeItem('user');
+        localStorage.removeItem('accessToken');
     }
 }
 
@@ -62,6 +95,7 @@ export function getCurrentUser(): User | null {
                 // If JSON parsing fails, clear the corrupted data
                 console.error('Failed to parse user data from localStorage:', error);
                 localStorage.removeItem('user');
+                localStorage.removeItem('accessToken');
                 return null;
             }
         }
@@ -70,10 +104,17 @@ export function getCurrentUser(): User | null {
 }
 
 export function isAuthenticated(): boolean {
-    return getCurrentUser() !== null;
+    return getCurrentUser() !== null && typeof window !== 'undefined' && !!localStorage.getItem('accessToken');
 }
 
 export function getUserRole(): UserRole | null {
     const user = getCurrentUser();
     return user?.role || null;
+}
+
+export function getAccessToken(): string | null {
+    if (typeof window !== 'undefined') {
+        return localStorage.getItem('accessToken');
+    }
+    return null;
 }

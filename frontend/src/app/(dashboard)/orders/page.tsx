@@ -25,7 +25,7 @@ import {
     DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { QuickBooksOrder } from '@/types';
-import { mockOrders } from '@/lib/mock-data';
+import { api, endpoints } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import {
     Search,
@@ -44,6 +44,11 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+interface OrdersResponse {
+    data: QuickBooksOrder[];
+    meta: { total: number; page: number; limit: number; totalPages: number };
+}
+
 export default function OrdersPage() {
     const router = useRouter();
     const [orders, setOrders] = useState<QuickBooksOrder[]>([]);
@@ -51,12 +56,17 @@ export default function OrdersPage() {
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
-        const timer = setTimeout(() => {
-            setOrders(mockOrders);
-            setLoading(false);
-        }, 600);
-
-        return () => clearTimeout(timer);
+        const fetchOrders = async () => {
+            try {
+                const response = await api.get<OrdersResponse>(`${endpoints.orders.list}?limit=100`);
+                setOrders(response.data);
+            } catch (err) {
+                console.error('Failed to load orders:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchOrders();
     }, []);
 
     const filteredOrders = orders.filter(order =>

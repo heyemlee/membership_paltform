@@ -61,3 +61,16 @@ export interface DiscountCode {
     createdAt: string;
     expiresAt?: string;
 }
+
+// Promo codes that are assigned to a customer for their use at checkout
+export interface AssignedPromoCode {
+    id: string;
+    code: string;
+    discountPercent: number;
+    description: string;
+    usageLimit?: number;
+    usedCount: number;
+    isActive: boolean;
+    expiresAt?: string;
+    assignedAt: string;
+}

@@ -6,23 +6,60 @@ import { StatsCard } from '@/components/common';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { mockDashboardStats } from '@/lib/mock-data';
+import { api, endpoints } from '@/lib/api';
+import { DashboardStats } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { DollarSign, Users, ShoppingCart, Clock, ArrowUpRight } from 'lucide-react';
 import Link from 'next/link';
 
 export default function DashboardPage() {
-    const [stats, setStats] = useState(mockDashboardStats);
+    const [stats, setStats] = useState<DashboardStats | null>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const timer = setTimeout(() => {
-            setStats(mockDashboardStats);
-            setLoading(false);
-        }, 600);
-
-        return () => clearTimeout(timer);
+        const fetchStats = async () => {
+            try {
+                const data = await api.get<DashboardStats>(endpoints.dashboard.stats);
+                setStats(data);
+            } catch (err) {
+                setError('Failed to load dashboard stats');
+                console.error('Dashboard error:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchStats();
     }, []);
+
+    if (loading) {
+        return (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                <PageHeader title="Dashboard" description="Overview of your business metrics and recent activity." />
+                <div className="grid gap-6 md:grid-cols-3">
+                    {[1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-32 w-full rounded-xl" />
+                    ))}
+                </div>
+                <div className="grid gap-6 lg:grid-cols-2">
+                    <Skeleton className="h-96 w-full rounded-xl" />
+                    <Skeleton className="h-96 w-full rounded-xl" />
+                </div>
+            </div>
+        );
+    }
+
+    if (error || !stats) {
+        return (
+            <div className="space-y-8">
+                <PageHeader title="Dashboard" description="Overview of your business metrics and recent activity." />
+                <Card className="p-8 text-center">
+                    <p className="text-muted-foreground">{error || 'Failed to load dashboard data'}</p>
+                    <Button className="mt-4" onClick={() => window.location.reload()}>Retry</Button>
+                </Card>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -46,7 +83,6 @@ export default function DashboardPage() {
                     value={formatCurrency(stats.totalRevenue)}
                     change={stats.revenueChange}
                     icon={DollarSign}
-                    loading={loading}
                     delay="0ms"
                 />
                 <StatsCard
@@ -54,7 +90,6 @@ export default function DashboardPage() {
                     value={stats.activeCustomers.toLocaleString()}
                     change={stats.customersChange}
                     icon={Users}
-                    loading={loading}
                     delay="100ms"
                 />
                 <StatsCard
@@ -62,7 +97,6 @@ export default function DashboardPage() {
                     value={stats.totalOrders.toLocaleString()}
                     change={stats.ordersChange}
                     icon={ShoppingCart}
-                    loading={loading}
                     delay="200ms"
                 />
             </div>

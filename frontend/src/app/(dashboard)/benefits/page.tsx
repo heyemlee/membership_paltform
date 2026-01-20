@@ -32,7 +32,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { mockDiscountCodes } from '@/lib/mock-data';
+import { api, endpoints } from '@/lib/api';
 import { DiscountCode } from '@/types';
 import { Plus, Ticket, Tag, ChevronRight, Percent, Users, Repeat } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -58,43 +58,53 @@ export default function BenefitsPage() {
     const [newDescription, setNewDescription] = useState('');
 
     useEffect(() => {
-        const timer = setTimeout(() => {
-            setDiscountCodes(mockDiscountCodes);
-            setLoading(false);
-        }, 600);
-        return () => clearTimeout(timer);
+        const fetchDiscountCodes = async () => {
+            try {
+                const data = await api.get<DiscountCode[]>(endpoints.benefits.discountCodes);
+                setDiscountCodes(data);
+            } catch (err) {
+                console.error('Failed to load discount codes:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchDiscountCodes();
     }, []);
 
     // Filter codes by type
     const promoCodes = discountCodes.filter(c => c.type === 'GENERIC');
     const exclusiveCodes = discountCodes.filter(c => c.type === 'EXCLUSIVE');
 
-    const handleCreatePromoCode = () => {
+    const handleCreatePromoCode = async () => {
         if (!newCode || !newDiscount) return;
 
-        const newPromoCode: DiscountCode = {
-            id: `code-${Date.now()}`,
-            code: newCode.toUpperCase(),
-            type: 'GENERIC',
-            description: newDescription || `Promo code ${newCode}`,
-            discountPercent: Number(newDiscount),
-            isActive: true,
-            usageCount: 0,
-            uniqueUsersCount: 0,
-            createdAt: new Date().toISOString(),
-            usageHistory: [],
-        };
+        try {
+            const newPromoCode = await api.post<DiscountCode>(endpoints.benefits.discountCodes, {
+                code: newCode.toUpperCase(),
+                type: 'GENERIC',
+                description: newDescription || `Promo code ${newCode}`,
+                discountPercent: Number(newDiscount),
+                isActive: true,
+            });
 
-        setDiscountCodes([newPromoCode, ...discountCodes]);
-        setNewCode('');
-        setNewDiscount('10');
-        setNewDescription('');
-        setIsCreateDialogOpen(false);
+            setDiscountCodes([newPromoCode, ...discountCodes]);
+            setNewCode('');
+            setNewDiscount('10');
+            setNewDescription('');
+            setIsCreateDialogOpen(false);
 
-        toast({
-            title: 'Promo code created',
-            description: `Code "${newPromoCode.code}" has been created successfully.`,
-        });
+            toast({
+                title: 'Promo code created',
+                description: `Code "${newPromoCode.code}" has been created successfully.`,
+            });
+        } catch (error) {
+            console.error('Failed to create promo code:', error);
+            toast({
+                title: 'Error',
+                description: 'Failed to create promo code. Please try again.',
+                variant: 'destructive',
+            });
+        }
     };
 
     if (loading) {

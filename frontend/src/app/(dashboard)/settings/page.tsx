@@ -9,8 +9,27 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { Settings as SettingsIcon, Percent, Coins, Loader2, Store, TrendingUp, DollarSign, Wallet } from 'lucide-react';
-import { mockSettings } from '@/lib/mock-data';
 import { Slider } from '@/components/ui/slider';
+import { api, endpoints } from '@/lib/api';
+
+interface SettingsData {
+    discountRates: {
+        GC: number;
+        DESIGNER: number;
+        WHOLESALE: number;
+    };
+    pointsConfig: {
+        earnRate: number;
+        pointsPerDollar: number;
+        minRedeemPoints: number;
+    };
+    wholesaleConfig: {
+        initialShareDiscount: number;
+        upgradeThreshold: number;
+        upgradedShareDiscount: number;
+        commissionWithdrawThreshold: number;
+    };
+}
 
 export default function SettingsPage() {
     const { toast } = useToast();
@@ -32,54 +51,117 @@ export default function SettingsPage() {
     const [wholesaleUpgradedShareDiscount, setWholesaleUpgradedShareDiscount] = useState(25);
     const [wholesaleCommissionWithdrawThreshold, setWholesaleCommissionWithdrawThreshold] = useState(500);
 
-    // Load settings on mount (using mock data)
+    // Load settings from API on mount
     useEffect(() => {
-        const timer = setTimeout(() => {
-            // Load from mock data
-            setGcDiscount(mockSettings.discountRates.GC);
-            setDesignerDiscount(mockSettings.discountRates.DESIGNER);
-            setWholesaleDiscount(mockSettings.discountRates.WHOLESALE);
+        const fetchSettings = async () => {
+            try {
+                const data = await api.get<SettingsData>(endpoints.settings.all);
 
-            setEarnRate(mockSettings.pointsConfig.earnRate);
-            setPointsPerDollar(mockSettings.pointsConfig.pointsPerDollar);
+                // Set discount rates
+                if (data.discountRates) {
+                    setGcDiscount(data.discountRates.GC || 25);
+                    setDesignerDiscount(data.discountRates.DESIGNER || 25);
+                    setWholesaleDiscount(data.discountRates.WHOLESALE || 25);
+                }
 
-            setLoading(false);
-        }, 500);
+                // Set points config
+                if (data.pointsConfig) {
+                    setEarnRate(data.pointsConfig.earnRate || 1);
+                    setPointsPerDollar(data.pointsConfig.pointsPerDollar || 100);
+                }
 
-        return () => clearTimeout(timer);
-    }, []);
+                // Set wholesale config
+                if (data.wholesaleConfig) {
+                    setWholesaleInitialShareDiscount(data.wholesaleConfig.initialShareDiscount || 20);
+                    setWholesaleUpgradeThreshold(data.wholesaleConfig.upgradeThreshold || 10000);
+                    setWholesaleUpgradedShareDiscount(data.wholesaleConfig.upgradedShareDiscount || 25);
+                    setWholesaleCommissionWithdrawThreshold(data.wholesaleConfig.commissionWithdrawThreshold || 500);
+                }
+            } catch (error) {
+                console.error('Failed to load settings:', error);
+                toast({
+                    title: 'Error',
+                    description: 'Failed to load settings. Using defaults.',
+                    variant: 'destructive',
+                });
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchSettings();
+    }, [toast]);
 
     const handleSaveDiscountRates = async () => {
         setSaving(true);
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 800));
-        setSaving(false);
-        toast({
-            title: 'Discount rates saved',
-            description: 'Customer type discount rates have been updated successfully.',
-        });
+        try {
+            await api.put(endpoints.settings.discountRates, {
+                GC: gcDiscount,
+                DESIGNER: designerDiscount,
+                WHOLESALE: wholesaleDiscount,
+            });
+            toast({
+                title: 'Discount rates saved',
+                description: 'Customer type discount rates have been updated successfully.',
+            });
+        } catch (error) {
+            console.error('Failed to save discount rates:', error);
+            toast({
+                title: 'Error',
+                description: 'Failed to save discount rates. Please try again.',
+                variant: 'destructive',
+            });
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleSavePointsConfig = async () => {
         setSaving(true);
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 800));
-        setSaving(false);
-        toast({
-            title: 'Points rules saved',
-            description: 'Points configuration has been updated successfully.',
-        });
+        try {
+            await api.put(endpoints.settings.pointsConfig, {
+                earnRate,
+                pointsPerDollar,
+            });
+            toast({
+                title: 'Points rules saved',
+                description: 'Points configuration has been updated successfully.',
+            });
+        } catch (error) {
+            console.error('Failed to save points config:', error);
+            toast({
+                title: 'Error',
+                description: 'Failed to save points configuration. Please try again.',
+                variant: 'destructive',
+            });
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleSaveWholesaleConfig = async () => {
         setSaving(true);
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 800));
-        setSaving(false);
-        toast({
-            title: 'Wholesale program saved',
-            description: 'Wholesale program settings have been updated successfully.',
-        });
+        try {
+            await api.put(endpoints.settings.wholesaleConfig, {
+                initialShareDiscount: wholesaleInitialShareDiscount,
+                upgradeThreshold: wholesaleUpgradeThreshold,
+                upgradedShareDiscount: wholesaleUpgradedShareDiscount,
+                commissionWithdrawThreshold: wholesaleCommissionWithdrawThreshold,
+            });
+            toast({
+                title: 'Wholesale program saved',
+                description: 'Wholesale program settings have been updated successfully.',
+            });
+        } catch (error) {
+            console.error('Failed to save wholesale config:', error);
+            toast({
+                title: 'Error',
+                description: 'Failed to save wholesale settings. Please try again.',
+                variant: 'destructive',
+            });
+        } finally {
+            setSaving(false);
+        }
     };
 
     if (loading) {

@@ -16,7 +16,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { mockDiscountCodes } from '@/lib/mock-data';
+import { api, endpoints } from '@/lib/api';
 import { DiscountCode } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { ArrowLeft, Percent, Users, DollarSign, Calendar, Tag, User, ShoppingCart, Clock } from 'lucide-react';
@@ -36,13 +36,19 @@ export default function BenefitDetailPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const timer = setTimeout(() => {
-            const found = mockDiscountCodes.find(c => c.id === params.id);
-            setCode(found || null);
-            setLoading(false);
-        }, 600);
-
-        return () => clearTimeout(timer);
+        const fetchCode = async () => {
+            try {
+                // Fetch all codes and find the one we need
+                const data = await api.get<DiscountCode[]>(endpoints.benefits.discountCodes);
+                const found = data.find(c => c.id === params.id);
+                setCode(found || null);
+            } catch (err) {
+                console.error('Failed to load discount code:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchCode();
     }, [params.id]);
 
     if (loading) {

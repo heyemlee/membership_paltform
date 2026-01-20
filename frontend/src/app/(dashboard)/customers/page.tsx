@@ -16,7 +16,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { mockCustomers } from '@/lib/mock-data';
+import { api, endpoints } from '@/lib/api';
 import { Customer } from '@/types';
 import {
     Search,
@@ -45,18 +45,31 @@ const CUSTOMER_TYPE_LABELS: Record<string, { label: string; className: string; i
     OTHER: { label: 'Other', className: 'bg-gray-100 text-gray-700 hover:bg-gray-100 border-gray-200' },
 };
 
+interface CustomersResponse {
+    data: Customer[];
+    meta: { total: number; page: number; limit: number; totalPages: number };
+}
+
 export default function CustomersPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const [totalCustomers, setTotalCustomers] = useState(0);
 
     useEffect(() => {
-        const timer = setTimeout(() => {
-            setCustomers(mockCustomers);
-            setLoading(false);
-        }, 600);
-        return () => clearTimeout(timer);
+        const fetchCustomers = async () => {
+            try {
+                const response = await api.get<CustomersResponse>(`${endpoints.customers.list}?limit=100`);
+                setCustomers(response.data);
+                setTotalCustomers(response.meta.total);
+            } catch (err) {
+                console.error('Failed to load customers:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchCustomers();
     }, []);
 
     const filteredCustomers = customers.filter(customer => {
@@ -68,8 +81,6 @@ export default function CustomersPage() {
         );
     });
 
-    // Calculate stats
-    const totalCustomers = customers.length;
 
     const getInitials = (name: string) => {
         return name
