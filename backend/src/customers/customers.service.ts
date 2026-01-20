@@ -37,6 +37,32 @@ export class CustomersService {
         return rates[type] || 0;
     }
 
+    /**
+     * Format phone number to standard US format: (XXX) XXX-XXXX
+     */
+    private formatPhone(phone: string | undefined | null): string | undefined {
+        if (!phone) return undefined;
+
+        // Remove all non-digit characters
+        const digits = phone.replace(/\D/g, '');
+
+        if (digits.length === 0) return undefined;
+        if (digits.length < 10) return digits; // Return as-is if too short
+
+        // Handle 10-digit US numbers
+        if (digits.length === 10) {
+            return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+        }
+
+        // Handle 11-digit numbers with country code 1
+        if (digits.length === 11 && digits[0] === '1') {
+            return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+        }
+
+        // For other lengths, just format the last 10 digits
+        return `(${digits.slice(-10, -7)}) ${digits.slice(-7, -4)}-${digits.slice(-4)}`;
+    }
+
     async findAll(query: CustomerQueryDto) {
         const { page = 1, limit = 10, type, search, sortBy = 'createdAt', sortOrder = 'desc' } = query;
         const skip = (page - 1) * limit;
@@ -112,6 +138,12 @@ export class CustomersService {
                     orderBy: { createdAt: 'desc' },
                 },
                 discountCodes: true,
+                discountCodeAssignments: {
+                    include: {
+                        discountCode: true,
+                    },
+                    orderBy: { assignedAt: 'desc' },
+                },
             },
         });
 
@@ -121,6 +153,19 @@ export class CustomersService {
 
         // Get discount rates from settings
         const discountRates = await this.getDiscountRatesFromSettings();
+
+        // Combine exclusive codes (discountCodes) and assigned promo codes (discountCodeAssignments)
+        const assignedPromoCodes = customer.discountCodeAssignments
+            .filter(a => a.discountCode.type === 'GENERIC' && a.discountCode.isActive)
+            .map(a => ({
+                id: a.id,
+                code: a.discountCode.code,
+                discountPercent: a.discountCode.discountPercent,
+                description: a.discountCode.description,
+                isActive: a.discountCode.isActive,
+                expiresAt: a.discountCode.expiresAt?.toISOString(),
+                assignedAt: a.assignedAt.toISOString(),
+            }));
 
         return {
             id: customer.id,
@@ -157,6 +202,7 @@ export class CustomersService {
                 description: pt.description,
                 createdAt: pt.createdAt.toISOString(),
             })),
+            assignedPromoCodes,
         };
     }
 
@@ -165,7 +211,7 @@ export class CustomersService {
             data: {
                 name: createDto.name,
                 email: createDto.email,
-                phone: createDto.phone,
+                phone: this.formatPhone(createDto.phone) || createDto.phone,
                 type: createDto.type as CustomerType || 'REGULAR',
                 discountRate: createDto.discountRate || 0,
                 customDiscountCode: createDto.customDiscountCode,
@@ -193,7 +239,7 @@ export class CustomersService {
             data: {
                 ...(updateDto.name && { name: updateDto.name }),
                 ...(updateDto.email !== undefined && { email: updateDto.email }),
-                ...(updateDto.phone && { phone: updateDto.phone }),
+                ...(updateDto.phone && { phone: this.formatPhone(updateDto.phone) || updateDto.phone }),
                 ...(updateDto.type && { type: updateDto.type as CustomerType }),
                 ...(updateDto.discountRate !== undefined && { discountRate: updateDto.discountRate }),
                 ...(updateDto.customDiscountCode !== undefined && { customDiscountCode: updateDto.customDiscountCode }),
@@ -272,5 +318,83 @@ export class CustomersService {
         ]);
 
         return { points: newBalance };
+    }
+
+    /**
+     * Bulk import customers with automatic duplicate detection
+     */
+    async bulkImport(type: string, customers: { name: string; phone?: string; email?: string }[], skipDuplicates: boolean = true) {
+        this.logger.log(`Starting bulk import of ${customers.length} customers as type ${type}`);
+
+        const results = {
+            imported: 0,
+            skipped: 0,
+            failed: 0,
+            errors: [] as string[],
+            importedCustomers: [] as any[],
+        };
+
+        // Get existing phone numbers for duplicate detection
+        const existingPhones = new Set<string>();
+        if (skipDuplicates) {
+            const existingCustomers = await this.prisma.customer.findMany({
+                select: { phone: true },
+            });
+            existingCustomers.forEach(c => {
+                if (c.phone) {
+                    // Normalize phone for comparison
+                    const normalized = c.phone.replace(/\D/g, '');
+                    existingPhones.add(normalized);
+                }
+            });
+        }
+
+        for (const customerData of customers) {
+            try {
+                // Skip if no phone (phone is required)
+                if (!customerData.phone) {
+                    results.skipped++;
+                    continue;
+                }
+
+                // Format phone and check for duplicates
+                const formattedPhone = this.formatPhone(customerData.phone);
+                const normalizedPhone = customerData.phone.replace(/\D/g, '');
+
+                if (skipDuplicates && existingPhones.has(normalizedPhone)) {
+                    results.skipped++;
+                    continue;
+                }
+
+                // Create customer
+                const customer = await this.prisma.customer.create({
+                    data: {
+                        name: customerData.name || formattedPhone || 'Unknown',
+                        email: customerData.email || null,
+                        phone: formattedPhone || customerData.phone,
+                        type: type as CustomerType,
+                        discountRate: 0,
+                    },
+                });
+
+                // Add to existing phones set to prevent duplicates within the batch
+                existingPhones.add(normalizedPhone);
+
+                results.imported++;
+                results.importedCustomers.push({
+                    id: customer.id,
+                    name: customer.name,
+                    phone: customer.phone,
+                    type: customer.type,
+                });
+            } catch (error) {
+                results.failed++;
+                results.errors.push(`Failed to import ${customerData.name || customerData.phone}: ${error.message}`);
+            }
+        }
+
+        this.logger.log(`Bulk import complete: ${results.imported} imported, ${results.skipped} skipped, ${results.failed} failed`);
+
+        return results;
     }
 }

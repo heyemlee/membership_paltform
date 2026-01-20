@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
     Select,
     SelectContent,
@@ -16,26 +17,66 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { ArrowLeft, Send } from 'lucide-react';
-import { mockContactLists } from '@/lib/mock-data';
-import { SelectGroup, SelectLabel, SelectSeparator } from '@/components/ui/select';
+import { ContactList } from '@/types';
+import { api, endpoints } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 
 export default function CreateSMSPage() {
     const router = useRouter();
+    const { toast } = useToast();
     const [name, setName] = useState('');
     const [message, setMessage] = useState('');
-    const [recipient, setRecipient] = useState('ALL');
+    const [selectedListId, setSelectedListId] = useState('');
     const [saving, setSaving] = useState(false);
+    const [contactLists, setContactLists] = useState<ContactList[]>([]);
+    const [loadingLists, setLoadingLists] = useState(true);
+
+    useEffect(() => {
+        fetchContactLists();
+    }, []);
+
+    const fetchContactLists = async () => {
+        try {
+            setLoadingLists(true);
+            const data = await api.get<ContactList[]>(endpoints.contacts.lists);
+            setContactLists(data);
+        } catch (error) {
+            console.error('Failed to fetch contact lists:', error);
+        } finally {
+            setLoadingLists(false);
+        }
+    };
 
     const handleSubmit = async () => {
-        if (!name || !message) return;
+        if (!name || !message || !selectedListId) return;
 
         setSaving(true);
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+            await api.post(endpoints.sms.campaigns, {
+                name,
+                message,
+                recipientFilter: 'CUSTOM',
+                targetListIds: [selectedListId],
+            });
 
-        alert('Campaign created successfully!');
-        router.push('/sms/campaigns');
+            toast({
+                title: 'Campaign Created',
+                description: 'Your SMS campaign has been created successfully.',
+            });
+            router.push('/sms/campaigns');
+        } catch (error) {
+            console.error('Failed to create campaign:', error);
+            toast({
+                title: 'Error',
+                description: 'Failed to create campaign. Please try again.',
+                variant: 'destructive',
+            });
+        } finally {
+            setSaving(false);
+        }
     };
+
+    const selectedList = contactLists.find(l => l.id === selectedListId);
 
     return (
         <div className="space-y-6">
@@ -67,30 +108,40 @@ export default function CreateSMSPage() {
 
                     <div className="space-y-2">
                         <Label htmlFor="recipient">Recipients</Label>
-                        <Select value={recipient} onValueChange={setRecipient}>
-                            <SelectTrigger>
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    <SelectLabel>Customer Types</SelectLabel>
-                                    <SelectItem value="ALL">All Customers</SelectItem>
-                                    <SelectItem value="GC">General Contractors</SelectItem>
-                                    <SelectItem value="DESIGNER">Designers</SelectItem>
-                                    <SelectItem value="REGULAR">Regular Customers</SelectItem>
-                                    <SelectItem value="WHOLESALE">Wholesale</SelectItem>
-                                </SelectGroup>
-                                <SelectSeparator />
-                                <SelectGroup>
-                                    <SelectLabel>Saved Lists</SelectLabel>
-                                    {mockContactLists.map(list => (
-                                        <SelectItem key={list.id} value={`LIST:${list.id}`}>
-                                            {list.name} ({list.count})
+                        {loadingLists ? (
+                            <Skeleton className="h-10 w-full" />
+                        ) : contactLists.length > 0 ? (
+                            <Select value={selectedListId} onValueChange={setSelectedListId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a contact list" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {contactLists.map(list => (
+                                        <SelectItem key={list.id} value={list.id}>
+                                            {list.name} ({list.count} contacts)
                                         </SelectItem>
                                     ))}
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
+                                </SelectContent>
+                            </Select>
+                        ) : (
+                            <div className="p-4 border rounded-lg bg-muted/50 text-center">
+                                <p className="text-sm text-muted-foreground mb-2">
+                                    No contact lists available
+                                </p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => router.push('/sms/lists')}
+                                >
+                                    Create Contact List
+                                </Button>
+                            </div>
+                        )}
+                        {selectedList && (
+                            <p className="text-xs text-muted-foreground">
+                                This campaign will be sent to {selectedList.count} contacts
+                            </p>
+                        )}
                     </div>
 
                     <div className="space-y-2">
@@ -111,7 +162,10 @@ export default function CreateSMSPage() {
                         <Button variant="outline" onClick={() => router.back()}>
                             Cancel
                         </Button>
-                        <Button onClick={handleSubmit} disabled={!name || !message || saving}>
+                        <Button
+                            onClick={handleSubmit}
+                            disabled={!name || !message || !selectedListId || saving}
+                        >
                             <Send className="mr-2 h-4 w-4" />
                             {saving ? 'Creating...' : 'Create Campaign'}
                         </Button>

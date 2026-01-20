@@ -113,3 +113,26 @@ export class AddPointsDto {
     @IsString()
     description: string;
 }
+
+export class ImportCustomerItem {
+    @IsString()
+    name: string;
+
+    @IsString()
+    @IsOptional()
+    phone?: string;
+
+    @IsString()
+    @IsOptional()
+    email?: string;
+}
+
+export class BulkImportCustomersDto {
+    @IsString()
+    type: string; // GC, DESIGNER, WHOLESALE, REGULAR
+
+    customers: ImportCustomerItem[];
+
+    @IsOptional()
+    skipDuplicates?: boolean = true;
+}

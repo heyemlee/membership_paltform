@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
+import { PhoneInput } from '@/components/ui/phone-input';
 import { Label } from '@/components/ui/label';
 import {
     Dialog,
@@ -27,9 +28,10 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { api, endpoints } from '@/lib/api';
-import { Customer, QuickBooksOrder, DiscountCode, AssignedPromoCode } from '@/types';
+import { Customer, QuickBooksOrder, DiscountCode, AssignedPromoCode, CustomerCredit } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { IssueCreditDialog } from '@/components/common/issue-credit-dialog';
 import {
     ArrowLeft,
     User,
@@ -49,7 +51,8 @@ import {
     Trash2,
     Check,
     Clock,
-    Gift
+    Gift,
+    DollarSign
 } from 'lucide-react';
 
 const CUSTOMER_TYPE_LABELS: Record<string, { label: string; className: string }> = {
@@ -89,10 +92,12 @@ export default function CustomerDetailPage() {
     const router = useRouter();
     const { toast } = useToast();
     const [customer, setCustomer] = useState<CustomerDetailResponse | null>(null);
+    const [credits, setCredits] = useState<CustomerCredit[]>([]);
     const [loading, setLoading] = useState(true);
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const [isCreateCodeDialogOpen, setIsCreateCodeDialogOpen] = useState(false);
     const [isAddPromoCodeDialogOpen, setIsAddPromoCodeDialogOpen] = useState(false);
+    const [isIssueCreditDialogOpen, setIsIssueCreditDialogOpen] = useState(false);
 
     // Edit form state
     const [editName, setEditName] = useState('');
@@ -107,22 +112,28 @@ export default function CustomerDetailPage() {
     // Add promo code form state (for assigning existing promo codes to a customer)
     const [promoCodeToAdd, setPromoCodeToAdd] = useState('');
 
+    const fetchCustomerData = async () => {
+        try {
+            const [customerData, creditsData] = await Promise.all([
+                api.get<CustomerDetailResponse>(endpoints.customers.detail(params.id as string)),
+                api.get<CustomerCredit[]>(endpoints.credits.customerCredits(params.id as string))
+            ]);
+
+            setCustomer(customerData);
+            setCredits(creditsData);
+            setEditName(customerData.name);
+            setEditEmail(customerData.email || '');
+            setEditPhone(customerData.phone);
+            setEditType(customerData.type);
+        } catch (err) {
+            console.error('Failed to load customer data:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchCustomer = async () => {
-            try {
-                const data = await api.get<CustomerDetailResponse>(endpoints.customers.detail(params.id as string));
-                setCustomer(data);
-                setEditName(data.name);
-                setEditEmail(data.email || '');
-                setEditPhone(data.phone);
-                setEditType(data.type);
-            } catch (err) {
-                console.error('Failed to load customer:', err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchCustomer();
+        fetchCustomerData();
     }, [params.id]);
 
     if (loading) {
@@ -337,10 +348,10 @@ export default function CustomerDetailPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="phone">Phone</Label>
-                                <Input
+                                <PhoneInput
                                     id="phone"
                                     value={editPhone}
-                                    onChange={(e) => setEditPhone(e.target.value)}
+                                    onChange={(value) => setEditPhone(value)}
                                 />
                             </div>
                             <div className="space-y-2">
@@ -496,8 +507,8 @@ export default function CustomerDetailPage() {
                                         <div
                                             key={code.id}
                                             className={`p-4 rounded-lg border ${isUsable
-                                                    ? 'bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200'
-                                                    : 'bg-gray-50 border-gray-200 opacity-70'
+                                                ? 'bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200'
+                                                : 'bg-gray-50 border-gray-200 opacity-70'
                                                 }`}
                                         >
                                             <div className="flex items-center justify-between mb-2">
@@ -547,12 +558,85 @@ export default function CustomerDetailPage() {
                                 })}
                             </div>
                         )}
-                        <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
-                            <p className="text-xs text-blue-600 mb-1">How it works</p>
-                            <p className="text-sm text-blue-700">
-                                These promo codes can be applied at checkout for discounts. Add codes manually or they may be assigned during special promotions.
-                            </p>
+                    </CardContent>
+                </Card>
+
+                {/* Available Credits */}
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <DollarSign className="h-5 w-5" />
+                                <div>
+                                    <CardTitle>Available Credits</CardTitle>
+                                    <CardDescription>Store credit vouchers available for use</CardDescription>
+                                </div>
+                            </div>
+                            <Button size="sm" variant="outline" onClick={() => setIsIssueCreditDialogOpen(true)}>
+                                <Plus className="h-4 w-4 mr-1" />
+                                Issue Credit
+                            </Button>
                         </div>
+                    </CardHeader>
+                    <CardContent>
+                        {credits.length === 0 ? (
+                            <div className="text-center py-6">
+                                <Coins className="h-10 w-10 mx-auto mb-3 text-muted-foreground opacity-50" />
+                                <p className="text-muted-foreground">No credits available</p>
+                                <p className="text-sm text-muted-foreground mt-1">Click "Issue Credit" to add balance</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {credits.map((credit) => {
+                                    const isExpired = credit.expiresAt && new Date(credit.expiresAt) < new Date();
+                                    const isUsable = credit.isActive && !credit.isUsed && !isExpired;
+
+                                    return (
+                                        <div
+                                            key={credit.id}
+                                            className={`p-4 rounded-lg border ${isUsable
+                                                ? 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200'
+                                                : 'bg-gray-50 border-gray-200 opacity-70'
+                                                }`}
+                                        >
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <Badge className={`${isUsable ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-600'} text-base px-3 py-1`}>
+                                                        ${credit.amount.toFixed(2)}
+                                                    </Badge>
+                                                    {!isUsable && (
+                                                        <Badge variant="outline" className="text-gray-500 border-gray-300">
+                                                            {credit.isUsed ? 'Used' : isExpired ? 'Expired' : 'Inactive'}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                                <div className="text-sm font-medium text-emerald-700">
+                                                    Min. order ${credit.minOrderAmount}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <div className="text-sm font-medium text-gray-900">{credit.name}</div>
+                                                {credit.expiresAt && (
+                                                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                                        <Clock className="h-3.5 w-3.5" />
+                                                        {isExpired ? 'Expired' : `Expires ${new Date(credit.expiresAt).toLocaleDateString()}`}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {credit.description && (
+                                                <p className="text-sm text-muted-foreground mt-2">{credit.description}</p>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        <IssueCreditDialog
+                            open={isIssueCreditDialogOpen}
+                            onOpenChange={setIsIssueCreditDialogOpen}
+                            onSuccess={fetchCustomerData}
+                        />
                     </CardContent>
                 </Card>
 
@@ -663,12 +747,6 @@ export default function CustomerDetailPage() {
                                     </div>
                                 </>
                             )}
-                            <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
-                                <p className="text-xs text-emerald-600 mb-1">How it works</p>
-                                <p className="text-sm text-emerald-700">
-                                    When someone uses one of these codes, both the user and {customer.name.split(' ')[0]} earn the same points!
-                                </p>
-                            </div>
                         </CardContent>
                     </Card>
                 )}
@@ -709,15 +787,20 @@ export default function CustomerDetailPage() {
                                                 )}
                                                 <div>
                                                     <div className="flex items-center gap-2">
-                                                        <p className="font-medium">{order.qbInvoiceId}</p>
+                                                        <p className="font-medium">{order.qbInvoiceId || `Order #${order.id.slice(0, 8)}`}</p>
                                                         {isReferralOrder && (
                                                             <Badge className="bg-emerald-100 text-emerald-800 text-xs">
                                                                 Referral
                                                             </Badge>
                                                         )}
                                                     </div>
+                                                    <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+                                                        <span>{formatCurrency(order.total)}</span>
+                                                        <span>•</span>
+                                                        <span>{new Date(order.createdAt).toLocaleDateString()}</span>
+                                                    </div>
                                                     {isReferralOrder && (
-                                                        <p className="text-sm text-muted-foreground">
+                                                        <p className="text-sm text-muted-foreground mt-1">
                                                             Used by <span className="font-medium text-foreground">{order.customerName}</span>
                                                         </p>
                                                     )}

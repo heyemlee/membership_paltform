@@ -6,28 +6,46 @@ import { StatusBadge } from '@/components/common';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { mockSMSCampaigns } from '@/lib/mock-data';
+import { api, endpoints } from '@/lib/api';
 import { SMSCampaign } from '@/types';
-import { Plus, MessageSquare, Users, Calendar } from 'lucide-react';
+import { Plus, MessageSquare, Users, Calendar, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
 
 export default function SMSCampaignsPage() {
+    const { toast } = useToast();
     const [campaigns, setCampaigns] = useState<SMSCampaign[]>([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setCampaigns(mockSMSCampaigns);
+    const fetchCampaigns = async () => {
+        try {
+            setLoading(true);
+            const data = await api.get<SMSCampaign[]>(endpoints.sms.campaigns);
+            setCampaigns(data);
+        } catch (error) {
+            console.error('Failed to fetch campaigns:', error);
+            toast({
+                title: 'Error',
+                description: 'Failed to load campaigns',
+                variant: 'destructive',
+            });
+        } finally {
             setLoading(false);
-        }, 600);
+        }
+    };
 
-        return () => clearTimeout(timer);
+    useEffect(() => {
+        fetchCampaigns();
     }, []);
 
     return (
         <div className="space-y-6">
             <PageHeader title="SMS Campaigns" description="Manage your SMS marketing campaigns">
                 <div className="flex gap-3">
+                    <Button variant="outline" onClick={fetchCampaigns} disabled={loading}>
+                        <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                        Refresh
+                    </Button>
                     <Link href="/sms/lists">
                         <Button variant="outline">
                             <Users className="mr-2 h-4 w-4" />
@@ -66,7 +84,7 @@ export default function SMSCampaignsPage() {
             ) : (
                 <div className="space-y-4">
                     {campaigns.map((campaign) => (
-                        <Card key={campaign.id}>
+                        <Card key={campaign.id} className="hover:shadow-md transition-shadow">
                             <CardContent className="flex items-center justify-between p-6">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-3 mb-2">
@@ -95,7 +113,9 @@ export default function SMSCampaignsPage() {
                                         )}
                                     </div>
                                 </div>
-                                <Button variant="outline" size="sm">View Details</Button>
+                                <Link href={`/sms/campaigns/${campaign.id}`}>
+                                    <Button variant="outline" size="sm">View Details</Button>
+                                </Link>
                             </CardContent>
                         </Card>
                     ))}

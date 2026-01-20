@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PhoneInput } from '@/components/ui/phone-input';
 import { Label } from '@/components/ui/label';
 import {
     Select,
@@ -85,11 +86,10 @@ export default function NewCustomerPage() {
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="space-y-2">
                             <Label htmlFor="phone">Phone Number <span className="text-red-500">*</span></Label>
-                            <Input
+                            <PhoneInput
                                 id="phone"
-                                placeholder="(555) 123-4567"
                                 value={formData.phone}
-                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                onChange={(value) => setFormData({ ...formData, phone: value })}
                                 required
                             />
                         </div>

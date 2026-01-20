@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { BenefitsService } from './benefits.service';
+import { BatchAssignByTypeDto, BatchAssignByListsDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('benefits')
@@ -55,6 +56,11 @@ export class BenefitsController {
         return this.benefitsService.getDiscountCodes(query);
     }
 
+    @Get('discount-codes/:id')
+    async getDiscountCodeById(@Param('id') id: string) {
+        return this.benefitsService.getDiscountCodeById(id);
+    }
+
     @Post('discount-codes')
     async createDiscountCode(@Body() data: any) {
         return this.benefitsService.createDiscountCode(data);
@@ -73,5 +79,26 @@ export class BenefitsController {
     @Post('discount-codes/validate')
     async validateDiscountCode(@Body('code') code: string) {
         return this.benefitsService.validateDiscountCode(code);
+    }
+
+    // Batch Assignment
+    @Post('discount-codes/:id/assign-by-type')
+    async batchAssignByType(@Param('id') id: string, @Body() dto: BatchAssignByTypeDto) {
+        return this.benefitsService.batchAssignByType(id, dto);
+    }
+
+    @Post('discount-codes/:id/assign-by-lists')
+    async batchAssignByLists(@Param('id') id: string, @Body() dto: BatchAssignByListsDto) {
+        return this.benefitsService.batchAssignByLists(id, dto);
+    }
+
+    @Delete('discount-codes/:id/assignments/:assignmentId')
+    async removeAssignment(@Param('id') id: string, @Param('assignmentId') assignmentId: string) {
+        return this.benefitsService.removeAssignment(id, assignmentId);
+    }
+
+    @Delete('discount-codes/:id/assignments')
+    async clearAllAssignments(@Param('id') id: string) {
+        return this.benefitsService.clearAllAssignments(id);
     }
 }

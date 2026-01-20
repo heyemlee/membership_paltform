@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/layout';
 import { Card, CardContent } from '@/components/ui/card';
@@ -40,7 +40,10 @@ import {
     FileText,
     ArrowUpRight,
     Filter,
-    Download
+    Download,
+    ArrowUpDown,
+    ArrowUp,
+    ArrowDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -49,11 +52,16 @@ interface OrdersResponse {
     meta: { total: number; page: number; limit: number; totalPages: number };
 }
 
+type SortField = 'date' | 'amount' | null;
+type SortDirection = 'asc' | 'desc';
+
 export default function OrdersPage() {
     const router = useRouter();
     const [orders, setOrders] = useState<QuickBooksOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [sortField, setSortField] = useState<SortField>(null);
+    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
     useEffect(() => {
         const fetchOrders = async () => {
@@ -69,10 +77,49 @@ export default function OrdersPage() {
         fetchOrders();
     }, []);
 
-    const filteredOrders = orders.filter(order =>
-        order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.qbInvoiceId.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredOrders = useMemo(() => {
+        return orders.filter(order =>
+            order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            order.qbInvoiceId.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }, [orders, searchQuery]);
+
+    const sortedOrders = useMemo(() => {
+        if (!sortField) return filteredOrders;
+
+        return [...filteredOrders].sort((a, b) => {
+            if (sortField === 'date') {
+                const dateA = new Date(a.createdAt).getTime();
+                const dateB = new Date(b.createdAt).getTime();
+                return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+            } else if (sortField === 'amount') {
+                return sortDirection === 'asc' ? a.total - b.total : b.total - a.total;
+            }
+            return 0;
+        });
+    }, [filteredOrders, sortField, sortDirection]);
+
+    const handleSort = (field: SortField) => {
+        if (sortField === field) {
+            if (sortDirection === 'desc') {
+                setSortDirection('asc');
+            } else {
+                setSortField(null);
+            }
+        } else {
+            setSortField(field);
+            setSortDirection('desc'); // Default to desc (newest/highest first)
+        }
+    };
+
+    const getSortIcon = (field: SortField) => {
+        if (sortField !== field) {
+            return <ArrowUpDown className="h-4 w-4 text-muted-foreground" />;
+        }
+        return sortDirection === 'desc'
+            ? <ArrowDown className="h-4 w-4 text-primary" />
+            : <ArrowUp className="h-4 w-4 text-primary" />;
+    };
 
     // Calculate Stats
     const totalRevenue = orders.reduce((acc, order) => acc + order.total, 0);
@@ -221,7 +268,7 @@ export default function OrdersPage() {
                     </div>
 
                     <CardContent className="p-0">
-                        {filteredOrders.length === 0 ? (
+                        {sortedOrders.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-24 text-center">
                                 <div className="bg-gray-50 p-4 rounded-full mb-4">
                                     <ShoppingBag className="h-8 w-8 text-muted-foreground opacity-50" />
@@ -237,15 +284,31 @@ export default function OrdersPage() {
                                     <TableRow className="hover:bg-transparent border-gray-100 bg-gray-50/50">
                                         <TableHead className="pl-6 h-12 font-semibold">Invoice ID</TableHead>
                                         <TableHead className="font-semibold">Customer</TableHead>
-                                        <TableHead className="font-semibold">Date</TableHead>
-                                        <TableHead className="font-semibold">Amount</TableHead>
+                                        <TableHead
+                                            className="font-semibold cursor-pointer hover:bg-muted/50 select-none"
+                                            onClick={() => handleSort('date')}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                Date
+                                                {getSortIcon('date')}
+                                            </div>
+                                        </TableHead>
+                                        <TableHead
+                                            className="font-semibold cursor-pointer hover:bg-muted/50 select-none"
+                                            onClick={() => handleSort('amount')}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                Amount
+                                                {getSortIcon('amount')}
+                                            </div>
+                                        </TableHead>
                                         <TableHead className="font-semibold text-center">Status</TableHead>
                                         <TableHead className="font-semibold text-center hidden md:table-cell">Sync</TableHead>
                                         <TableHead className="w-[50px]"></TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {filteredOrders.map((order) => {
+                                    {sortedOrders.map((order) => {
                                         const statusConfig = getStatusConfig(order.status as string);
                                         const StatusIcon = statusConfig.icon;
 
@@ -328,7 +391,7 @@ export default function OrdersPage() {
                             </Table>
                         )}
                         <div className="p-4 border-t border-gray-100 bg-gray-50/30 flex items-center justify-between text-xs text-muted-foreground">
-                            <span>Showing {filteredOrders.length} orders</span>
+                            <span>Showing {sortedOrders.length} orders</span>
                             <div className="flex gap-2">
                                 <Button variant="outline" size="sm" className="h-8 text-xs" disabled>Previous</Button>
                                 <Button variant="outline" size="sm" className="h-8 text-xs" disabled>Next</Button>
@@ -339,25 +402,4 @@ export default function OrdersPage() {
             </div>
         </div>
     );
-}
-
-// Missing icon component definition
-function TrendingUpIcon(props: React.SVGProps<SVGSVGElement>) {
-    return (
-        <svg
-            {...props}
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-            <polyline points="17 6 23 6 23 12" />
-        </svg>
-    )
 }

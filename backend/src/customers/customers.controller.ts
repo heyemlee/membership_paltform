@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { CustomersService } from './customers.service';
-import { CreateCustomerDto, UpdateCustomerDto, CustomerQueryDto, AddPointsDto } from './dto';
+import { CreateCustomerDto, UpdateCustomerDto, CustomerQueryDto, AddPointsDto, BulkImportCustomersDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('customers')
@@ -21,6 +21,15 @@ export class CustomersController {
     @Post()
     async create(@Body() createDto: CreateCustomerDto) {
         return this.customersService.create(createDto);
+    }
+
+    @Post('bulk-import')
+    async bulkImport(@Body() bulkImportDto: BulkImportCustomersDto) {
+        return this.customersService.bulkImport(
+            bulkImportDto.type,
+            bulkImportDto.customers,
+            bulkImportDto.skipDuplicates ?? true
+        );
     }
 
     @Put(':id')

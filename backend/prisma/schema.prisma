@@ -92,9 +92,11 @@ model Customer {
   updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  orders             Order[]
-  discountCodes      DiscountCode[]
-  pointsTransactions PointsTransaction[]
+  orders                  Order[]
+  discountCodes           DiscountCode[]
+  pointsTransactions      PointsTransaction[]
+  discountCodeAssignments DiscountCodeAssignment[]
+  credits                 CustomerCredit[]
 
   @@index([type])
   @@index([phone])
@@ -169,10 +171,27 @@ model DiscountCode {
   customer       Customer?          @relation(fields: [customerId], references: [id], onDelete: Cascade)
   createdBy      Profile?           @relation("CreatedByUser", fields: [createdById], references: [id])
   usageHistory   DiscountCodeUsage[]
+  assignments    DiscountCodeAssignment[]
 
   @@index([customerId])
   @@index([code])
   @@map("discount_codes")
+}
+
+model DiscountCodeAssignment {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  discountCodeId String   @map("discount_code_id") @db.Uuid
+  customerId     String   @map("customer_id") @db.Uuid
+  assignedAt     DateTime @default(now()) @map("assigned_at") @db.Timestamptz(6)
+
+  // Relations
+  discountCode   DiscountCode @relation(fields: [discountCodeId], references: [id], onDelete: Cascade)
+  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([discountCodeId, customerId])
+  @@index([discountCodeId])
+  @@index([customerId])
+  @@map("discount_code_assignments")
 }
 
 model DiscountCodeUsage {
@@ -191,6 +210,7 @@ model DiscountCodeUsage {
 
   @@map("discount_code_usage")
 }
+
 
 model DiscountRule {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -243,6 +263,58 @@ model PointsTransaction {
   @@map("points_transactions")
 }
 
+// ==================== Credits (代金券/储值余额) ====================
+
+enum CreditSource {
+  PROMOTION      // 促销活动
+  BIRTHDAY       // 生日礼金
+  REFERRAL       // 推荐奖励
+  COMPENSATION   // 补偿
+  MANUAL         // 手动发放
+}
+
+model CustomerCredit {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId      String       @map("customer_id") @db.Uuid
+  
+  amount          Decimal      @db.Decimal(10, 2)   // 代金券金额
+  minOrderAmount  Decimal      @map("min_order_amount") @db.Decimal(10, 2)  // 最低消费门槛
+  
+  name            String                            // 代金券名称，如"新年礼金"
+  description     String?                           // 详细描述
+  source          CreditSource @default(MANUAL)     // 发放来源
+  batchId         String?      @map("batch_id")     // 批次ID（同一批发放的共享此ID）
+  
+  isUsed          Boolean      @default(false) @map("is_used")      // 是否已使用
+  isActive        Boolean      @default(true) @map("is_active")     // 是否有效
+  expiresAt       DateTime?    @map("expires_at") @db.Timestamptz(6) // 过期时间（null表示永不过期）
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  usedAt          DateTime?    @map("used_at") @db.Timestamptz(6)
+  
+  // Relations
+  customer        Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  usageHistory    CreditUsage[]
+  
+  @@index([customerId])
+  @@index([batchId])
+  @@index([isUsed, isActive])
+  @@map("customer_credits")
+}
+
+model CreditUsage {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  creditId    String   @map("credit_id") @db.Uuid
+  orderId     String   @map("order_id")
+  orderTotal  Decimal  @map("order_total") @db.Decimal(10, 2)
+  amountUsed  Decimal  @map("amount_used") @db.Decimal(10, 2)
+  usedAt      DateTime @default(now()) @map("used_at") @db.Timestamptz(6)
+  
+  // Relations
+  credit      CustomerCredit @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  
+  @@map("credit_usage")
+}
+
 // ==================== SMS ====================
 
 model SMSCampaign {
@@ -260,7 +332,8 @@ model SMSCampaign {
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  createdBy Profile? @relation("CreatedByUser", fields: [createdById], references: [id])
+  createdBy   Profile?          @relation("CreatedByUser", fields: [createdById], references: [id])
+  targetLists SMSCampaignList[]
 
   @@map("sms_campaigns")
 }
@@ -277,16 +350,61 @@ model SMSTemplate {
 
 // ==================== Contact List ====================
 
+enum ContactListType {
+  CUSTOMER_SYNC    // Auto-synced from Customers table
+  MANUAL_IMPORT    // Manually imported from Excel/CSV
+}
+
 model ContactList {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name        String
-  description String?
-  count       Int      @default(0)
-  source      String   @default("MANUAL")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String
+  description     String?
+  type            ContactListType @default(MANUAL_IMPORT)
+  filterCriteria  Json?           @map("filter_criteria")  // For CUSTOMER_SYNC: {"customerTypes": ["GC", "DESIGNER"]}
+  count           Int             @default(0)
+  lastSyncedAt    DateTime?       @map("last_synced_at") @db.Timestamptz(6)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  contacts        Contact[]
+  campaigns       SMSCampaignList[]
 
   @@map("contact_lists")
+}
+
+model Contact {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  listId       String      @map("list_id") @db.Uuid
+  customerId   String?     @map("customer_id") @db.Uuid  // Null if imported manually
+  customerType String?     @map("customer_type")         // GC, DESIGNER, REGULAR, WHOLESALE
+  name         String
+  phone        String?
+  email        String?
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  list        ContactList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@index([listId])
+  @@index([phone])
+  @@index([email])
+  @@map("contacts")
+}
+
+// Junction table for many-to-many: Campaign can target multiple lists
+model SMSCampaignList {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaignId  String      @map("campaign_id") @db.Uuid
+  listId      String      @map("list_id") @db.Uuid
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  campaign    SMSCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  list        ContactList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, listId])
+  @@map("sms_campaign_lists")
 }
 
 // ==================== System Settings ====================

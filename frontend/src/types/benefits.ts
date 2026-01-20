@@ -43,6 +43,14 @@ export interface DiscountCodeUsage {
     usedAt: string;
 }
 
+export interface AssignedCustomer {
+    id: string;
+    customerId: string;
+    customerName: string;
+    customerType: string;
+    assignedAt: string;
+}
+
 export interface DiscountCode {
     id: string;
     code: string;
@@ -57,6 +65,7 @@ export interface DiscountCode {
         customerName: string;
         customerType: string;
     };
+    assignedCustomers?: AssignedCustomer[];
     usageHistory?: DiscountCodeUsage[];
     createdAt: string;
     expiresAt?: string;
@@ -74,3 +83,70 @@ export interface AssignedPromoCode {
     expiresAt?: string;
     assignedAt: string;
 }
+
+// ==================== Credits (代金券/储值余额) ====================
+
+export type CreditSource = 'PROMOTION' | 'BIRTHDAY' | 'REFERRAL' | 'COMPENSATION' | 'MANUAL';
+
+export interface CustomerCredit {
+    id: string;
+    customerId: string;
+    customerName?: string;
+    customerType?: string;
+    amount: number;
+    minOrderAmount: number;
+    name: string;
+    description?: string;
+    source: CreditSource;
+    batchId?: string;
+    isUsed: boolean;
+    isActive: boolean;
+    expiresAt?: string;
+    createdAt: string;
+    usedAt?: string;
+}
+
+export interface CreditBatch {
+    batchId: string;
+    name: string;
+    source: CreditSource;
+    amount: number;
+    minOrderAmount: number;
+    totalIssued: number;
+    usedCount: number;
+    totalValue: number;
+    createdAt: string;
+    expiresAt?: string;
+}
+
+export interface CreditStats {
+    totalIssued: number;
+    totalUsed: number;
+    totalActive: number;
+    totalExpired: number;
+    totalValue: number;
+    usedValue: number;
+    usageRate: number;
+}
+
+export interface IssueCreditRequest {
+    name: string;
+    description?: string;
+    amount: number;
+    minOrderAmount: number;
+    source?: CreditSource;
+    expiresInDays?: number | null;  // null means never expires
+}
+
+export interface IssueByTypeRequest extends IssueCreditRequest {
+    customerTypes: string[];
+}
+
+export interface IssueByListsRequest extends IssueCreditRequest {
+    listIds: string[];
+}
+
+export interface IssueByCustomersRequest extends IssueCreditRequest {
+    customerIds: string[];
+}
+

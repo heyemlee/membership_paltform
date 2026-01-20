@@ -12,9 +12,11 @@ import { CustomersModule } from './customers/customers.module';
 import { OrdersModule } from './orders/orders.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { BenefitsModule } from './benefits/benefits.module';
+import { CreditsModule } from './credits/credits.module';
 import { SettingsModule } from './settings/settings.module';
 import { SmsModule } from './sms/sms.module';
 import { QuickBooksModule } from './quickbooks/quickbooks.module';
+import { ContactsModule } from './contacts/contacts.module';
 
 @Module({
   imports: [
@@ -34,9 +36,11 @@ import { QuickBooksModule } from './quickbooks/quickbooks.module';
     OrdersModule,
     DashboardModule,
     BenefitsModule,
+    CreditsModule,
     SettingsModule,
     SmsModule,
     QuickBooksModule,
+    ContactsModule,
   ],
   providers: [
     // Global validation pipe

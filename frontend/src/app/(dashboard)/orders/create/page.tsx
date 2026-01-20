@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 import {
     Select,
     SelectContent,
@@ -24,10 +25,11 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { api, endpoints } from '@/lib/api';
-import { Customer, OrderItemBasic } from '@/types';
+import { Customer, OrderItemBasic, CustomerCredit } from '@/types';
 import { formatCurrency } from '@/lib/utils';
-import { ArrowLeft, Plus, Search, Trash2, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, ShoppingCart, Coins, DollarSign, Clock } from 'lucide-react';
 
 interface CustomersResponse {
     data: Customer[];
@@ -49,6 +51,11 @@ export default function CreateOrderPage() {
     const [usePoints, setUsePoints] = useState(false);
     const [pointsToRedeem, setPointsToRedeem] = useState('');
 
+    // Credits
+    const [customerCredits, setCustomerCredits] = useState<CustomerCredit[]>([]);
+    const [selectedCreditId, setSelectedCreditId] = useState<string | null>(null);
+    const [loadingCredits, setLoadingCredits] = useState(false);
+
     useEffect(() => {
         const fetchCustomers = async () => {
             try {
@@ -60,6 +67,24 @@ export default function CreateOrderPage() {
         };
         fetchCustomers();
     }, []);
+
+    // Fetch credits when customer changes
+    useEffect(() => {
+        if (selectedCustomerId) {
+            setLoadingCredits(true);
+            setSelectedCreditId(null);
+            api.get<CustomerCredit[]>(`${endpoints.credits.customerCredits(selectedCustomerId)}?available=true`)
+                .then(data => setCustomerCredits(data))
+                .catch(err => {
+                    console.error('Failed to load customer credits:', err);
+                    setCustomerCredits([]);
+                })
+                .finally(() => setLoadingCredits(false));
+        } else {
+            setCustomerCredits([]);
+            setSelectedCreditId(null);
+        }
+    }, [selectedCustomerId]);
 
     const customer = customers.find(c => c.id === selectedCustomerId);
 
@@ -92,17 +117,25 @@ export default function CreateOrderPage() {
     const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
     const discountRate = customer?.discountRate || 0;
     const discountAmount = subtotal * (discountRate / 100);
+    const afterDiscount = subtotal - discountAmount;
 
+    // Points
     const maxPoints = customer?.points || 0;
-    const pointsValue = usePoints ? Math.min(parseInt(pointsToRedeem || '0'), maxPoints) * 0.01 : 0; // 1 point = $0.01
+    const pointsValue = usePoints ? Math.min(parseInt(pointsToRedeem || '0'), maxPoints) * 0.01 : 0;
 
-    const total = Math.max(0, subtotal - discountAmount - pointsValue);
+    // Credits
+    const selectedCredit = customerCredits.find(c => c.id === selectedCreditId);
+    const creditValue = selectedCredit ? selectedCredit.amount : 0;
+    const canUseCredit = selectedCredit ? afterDiscount >= selectedCredit.minOrderAmount : false;
+
+    const total = Math.max(0, afterDiscount - pointsValue - (canUseCredit ? creditValue : 0));
 
     const handleSubmit = async () => {
         if (!customer || items.length === 0) return;
 
         try {
-            await api.post(endpoints.orders.create, {
+            // Create the order
+            const orderResponse = await api.post<{ id: string }>(endpoints.orders.create, {
                 customerId: customer.id,
                 customerName: customer.name,
                 items: items.map(item => ({
@@ -113,6 +146,19 @@ export default function CreateOrderPage() {
                 pointsToRedeem: usePoints ? parseInt(pointsToRedeem || '0') : 0,
             });
 
+            // If a credit was selected and can be used, mark it as used
+            if (selectedCreditId && canUseCredit && orderResponse.id) {
+                try {
+                    await api.post(endpoints.credits.use(selectedCreditId), {
+                        orderId: orderResponse.id,
+                        orderTotal: afterDiscount,
+                    });
+                } catch (creditError) {
+                    console.error('Failed to apply credit:', creditError);
+                    // Order was still created, just credit wasn't applied
+                }
+            }
+
             alert('Order created successfully!');
             router.push('/orders');
         } catch (error) {
@@ -120,6 +166,12 @@ export default function CreateOrderPage() {
             alert('Failed to create order. Please try again.');
         }
     };
+
+    // Get available credits (active, not used, not expired, and meets min order)
+    const availableCredits = customerCredits.filter(credit => {
+        const isExpired = credit.expiresAt && new Date(credit.expiresAt) < new Date();
+        return credit.isActive && !credit.isUsed && !isExpired;
+    });
 
     return (
         <div className="space-y-6">
@@ -129,7 +181,7 @@ export default function CreateOrderPage() {
                 </Button>
                 <PageHeader
                     title="Create New Order"
-                    description="Manually create an order and apply points"
+                    description="Manually create an order and apply points or credits"
                 />
             </div>
 
@@ -275,9 +327,14 @@ export default function CreateOrderPage() {
                             {customer && (
                                 <>
                                     <Separator />
+
+                                    {/* Points Section */}
                                     <div className="flex items-center justify-between py-2">
                                         <div className="space-y-0.5">
-                                            <Label className="text-base">Redeem Points</Label>
+                                            <Label className="text-base flex items-center gap-2">
+                                                <Coins className="h-4 w-4 text-amber-500" />
+                                                Redeem Points
+                                            </Label>
                                             <p className="text-xs text-muted-foreground">
                                                 Max: {customer.points} (${(customer.points * 0.01).toFixed(2)})
                                             </p>
@@ -304,6 +361,85 @@ export default function CreateOrderPage() {
                                             </p>
                                         </div>
                                     )}
+
+                                    {/* Credits Section */}
+                                    <Separator />
+                                    <div className="space-y-3">
+                                        <Label className="text-base flex items-center gap-2">
+                                            <DollarSign className="h-4 w-4 text-emerald-500" />
+                                            Use Credit Voucher
+                                        </Label>
+
+                                        {loadingCredits ? (
+                                            <p className="text-sm text-muted-foreground">Loading credits...</p>
+                                        ) : availableCredits.length === 0 ? (
+                                            <p className="text-sm text-muted-foreground">No credits available</p>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {availableCredits.map((credit) => {
+                                                    const meetsMinOrder = afterDiscount >= credit.minOrderAmount;
+                                                    const isSelected = selectedCreditId === credit.id;
+
+                                                    return (
+                                                        <div
+                                                            key={credit.id}
+                                                            className={`p-3 rounded-lg border cursor-pointer transition-all ${isSelected
+                                                                    ? 'border-emerald-500 bg-emerald-50'
+                                                                    : meetsMinOrder
+                                                                        ? 'border-gray-200 hover:border-emerald-300'
+                                                                        : 'border-gray-200 bg-gray-50 opacity-60'
+                                                                }`}
+                                                            onClick={() => {
+                                                                if (meetsMinOrder) {
+                                                                    setSelectedCreditId(isSelected ? null : credit.id);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
+                                                                    <Checkbox
+                                                                        checked={isSelected}
+                                                                        disabled={!meetsMinOrder}
+                                                                        className="pointer-events-none"
+                                                                    />
+                                                                    <div>
+                                                                        <Badge className="bg-emerald-100 text-emerald-700">
+                                                                            ${credit.amount.toFixed(2)} off
+                                                                        </Badge>
+                                                                        <p className="text-xs text-muted-foreground mt-1">
+                                                                            {credit.name}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <p className={`text-xs ${meetsMinOrder ? 'text-emerald-600' : 'text-orange-500'}`}>
+                                                                        Min. ${credit.minOrderAmount}
+                                                                    </p>
+                                                                    {credit.expiresAt && (
+                                                                        <p className="text-xs text-muted-foreground flex items-center gap-1 justify-end">
+                                                                            <Clock className="h-3 w-3" />
+                                                                            {new Date(credit.expiresAt).toLocaleDateString()}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            {!meetsMinOrder && (
+                                                                <p className="text-xs text-orange-500 mt-2">
+                                                                    Order must be at least ${credit.minOrderAmount} to use this credit
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {selectedCredit && canUseCredit && (
+                                            <p className="text-sm text-right text-emerald-600">
+                                                - {formatCurrency(creditValue)}
+                                            </p>
+                                        )}
+                                    </div>
                                 </>
                             )}
 

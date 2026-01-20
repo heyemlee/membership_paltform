@@ -33,15 +33,30 @@ export class SmsService {
         message: string;
         recipientFilter: string;
         scheduledAt?: string;
+        contactListId?: string;
     }) {
+        // Valid customer types for filtering
+        const validCustomerTypes = ['REGULAR', 'GC', 'DESIGNER', 'WHOLESALE', 'OTHER'];
+
         // Count recipients based on filter
         let recipientCount = 0;
+
         if (data.recipientFilter === 'ALL') {
             recipientCount = await this.prisma.customer.count();
-        } else {
+        } else if (data.recipientFilter === 'CUSTOM' && data.contactListId) {
+            // For CUSTOM filter, count contacts from the specified list
+            const list = await this.prisma.contactList.findUnique({
+                where: { id: data.contactListId },
+            });
+            recipientCount = list?.count || 0;
+        } else if (validCustomerTypes.includes(data.recipientFilter)) {
+            // Filter by valid customer type
             recipientCount = await this.prisma.customer.count({
                 where: { type: data.recipientFilter as any },
             });
+        } else {
+            // Default: count all customers if filter is not recognized
+            recipientCount = await this.prisma.customer.count();
         }
 
         return this.prisma.sMSCampaign.create({

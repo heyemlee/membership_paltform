@@ -573,24 +573,6 @@ export default function SettingsPage() {
                     </div>
                 </CardContent>
             </Card>
-
-            {/* Info Card */}
-            <Card className="border-blue-200 bg-blue-50/50">
-                <CardContent className="pt-6">
-                    <div className="flex items-start gap-3">
-                        <SettingsIcon className="h-5 w-5 text-blue-600 mt-0.5" />
-                        <div>
-                            <h4 className="font-medium text-blue-900">How Settings Work</h4>
-                            <ul className="mt-2 text-sm text-blue-700 space-y-1">
-                                <li><strong>Customer Type Discounts:</strong> GC, Designer, and Wholesale customers automatically receive the configured discount on all orders.</li>
-                                <li><strong>Points Earning:</strong> GC and Designer customers earn points based on the earn rate when orders are completed. Wholesale customers do NOT earn points.</li>
-                                <li><strong>Points Redemption:</strong> Customers can redeem accumulated points for discounts on future orders.</li>
-                                <li><strong>Wholesale Commission:</strong> Wholesalers earn commission (difference between their discount and shared discount) when others use their codes.</li>
-                            </ul>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
         </div>
     );
 }
